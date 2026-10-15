@@ -459,8 +459,7 @@ onUnmounted(() => {
       </a>
 
       <div class="school-switcher">
-        <div class="school-crest">N</div>
-        <div class="school-copy"><strong>Northfield University</strong><span>Student portal</span></div>
+        <div class="school-copy"><strong>Student portal</strong><span>Campus desk</span></div>
         <span class="chevron">⌄</span>
       </div>
 
@@ -639,7 +638,7 @@ onUnmounted(() => {
           <button class="sign-out-button" type="button" @click="signOut">Sign out</button>
         </template>
       </div>
-      <footer class="page-footer"><span>© {{ new Date().getFullYear() }} Northfield University</span></footer>
+      <footer class="page-footer"><span>© {{ new Date().getFullYear() }} Campus Desk</span></footer>
     </main>
     <Transition name="toast"><div v-if="toast" class="toast-message" role="status"><span>✓</span>{{ toast }}</div></Transition>
   </div>
