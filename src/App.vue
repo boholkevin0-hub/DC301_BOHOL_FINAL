@@ -35,6 +35,13 @@ const navItems = [
 ]
 
 const accountsKey = 'campus-accounts'
+const sessionKey = 'campus-session'
+const draftKeys = {
+  request: 'campus-request-draft',
+  createAccount: 'campus-create-account-draft',
+  login: 'campus-login-draft',
+  profile: 'campus-profile-draft',
+}
 
 function readAccounts() {
   try {
@@ -49,22 +56,61 @@ function readAccounts() {
   }
 }
 
+function readSessionAccount() {
+  try {
+    const stored = localStorage.getItem(sessionKey)
+    return typeof stored === 'string' && stored ? stored.trim().toLowerCase() : ''
+  } catch (error) {
+    console.error('Could not read saved session:', error)
+    return ''
+  }
+}
+
+function readDraft(key, fallback) {
+  try {
+    const stored = localStorage.getItem(key)
+    const parsed = stored ? JSON.parse(stored) : null
+    return parsed !== null ? parsed : fallback
+  } catch (error) {
+    console.error('Could not read draft:', error)
+    return fallback
+  }
+}
+
+function saveDraft(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch (error) {
+    console.error('Could not save draft:', error)
+  }
+}
+
+function clearDraft(key) {
+  try {
+    localStorage.removeItem(key)
+  } catch (error) {
+    console.error('Could not clear draft:', error)
+  }
+}
+
 const accounts = ref(readAccounts())
 const authMode = ref(accounts.value.length ? 'login' : 'register')
-const createAccountForm = ref({
-  name: '',
-  studentId: '',
-  email: '',
-  course: '',
-  year: '',
-  password: '',
-  confirmPassword: '',
-})
+const createAccountForm = ref(
+  readDraft(draftKeys.createAccount, {
+    name: '',
+    studentId: '',
+    email: '',
+    course: '',
+    year: '',
+    password: '',
+    confirmPassword: '',
+  }),
+)
 const requests = ref([])
-const profile = ref({ name: '', studentId: '', email: '', course: '', year: '' })
+const profile = ref(readDraft(draftKeys.profile, { name: '', studentId: '', email: '', course: '', year: '' }))
 const isSignedIn = ref(false)
 const currentAccountEmail = ref('')
-const loginForm = ref({ email: '', password: '' })
+const loginForm = ref(readDraft(draftKeys.login, { email: '', password: '' }))
 const loginError = ref('')
 const currentPage = ref('dashboard')
 const search = ref('')
@@ -72,7 +118,7 @@ const statusFilter = ref('All requests')
 const formError = ref('')
 const toast = ref('')
 const editingId = ref(null)
-const requestForm = ref(emptyForm())
+const requestForm = ref(readDraft(draftKeys.request, emptyForm()))
 const profileSaved = ref(false)
 let toastTimer
 
@@ -86,6 +132,11 @@ function localDate() {
   const month = String(today.getMonth() + 1).padStart(2, '0')
   const day = String(today.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function resolveRoutePage() {
+  const path = window.location.pathname.replace(/^\/+|\/+$/g, '')
+  return ['request', 'requests', 'profile'].includes(path) ? path : 'dashboard'
 }
 
 function navigate(page, query = '') {
@@ -141,9 +192,15 @@ function openAccount(account) {
   profile.value = { ...account.profile }
   requests.value = Array.isArray(account.requests) ? [...account.requests] : []
   isSignedIn.value = true
+  try {
+    localStorage.setItem(sessionKey, account.email)
+  } catch (error) {
+    console.error('Could not save session:', error)
+  }
   loginError.value = ''
   loginForm.value.password = ''
-  navigate('dashboard')
+  const nextPage = resolveRoutePage()
+  navigate(nextPage)
 }
 
 async function createAccount() {
@@ -225,6 +282,15 @@ function signOut() {
   profile.value = { name: '', studentId: '', email: '', course: '', year: '' }
   requests.value = []
   isSignedIn.value = false
+  try {
+    localStorage.removeItem(sessionKey)
+  } catch (error) {
+    console.error('Could not clear session:', error)
+  }
+  clearDraft(draftKeys.profile)
+  clearDraft(draftKeys.request)
+  clearDraft(draftKeys.login)
+  clearDraft(draftKeys.createAccount)
   authMode.value = 'login'
   loginError.value = ''
   currentPage.value = 'dashboard'
@@ -267,6 +333,7 @@ function beginEdit(request) {
 function resetForm() {
   editingId.value = null
   requestForm.value = emptyForm()
+  clearDraft(draftKeys.request)
   formError.value = ''
 }
 
@@ -306,6 +373,7 @@ function submitRequest() {
     })
     notify('Your document request has been submitted.')
   }
+  clearDraft(draftKeys.request)
   resetForm()
   navigate('requests')
 }
@@ -330,6 +398,7 @@ function saveProfile() {
   currentAccountEmail.value = email
   loginForm.value.email = email
   profile.value.email = email
+  clearDraft(draftKeys.profile)
   profileSaved.value = true
   notify('Your profile has been saved.')
   setTimeout(() => (profileSaved.value = false), 2500)
@@ -387,7 +456,53 @@ watch(
   { deep: true },
 )
 
+watch(
+  requestForm,
+  (value) => {
+    saveDraft(draftKeys.request, value)
+  },
+  { deep: true },
+)
+
+watch(
+  createAccountForm,
+  (value) => {
+    saveDraft(draftKeys.createAccount, {
+      ...value,
+      password: '',
+      confirmPassword: '',
+    })
+  },
+  { deep: true },
+)
+
+watch(
+  loginForm,
+  (value) => {
+    saveDraft(draftKeys.login, { email: value.email || '' })
+  },
+  { deep: true },
+)
+
+watch(
+  profile,
+  (value) => {
+    saveDraft(draftKeys.profile, value)
+  },
+  { deep: true },
+)
+
 onMounted(() => {
+  const savedSessionEmail = readSessionAccount()
+  if (savedSessionEmail) {
+    const savedAccount = accounts.value.find((account) => account.email === savedSessionEmail)
+    if (savedAccount) {
+      openAccount(savedAccount)
+      window.addEventListener('popstate', syncRoute)
+      return
+    }
+  }
+
   syncRoute()
   window.addEventListener('popstate', syncRoute)
 })
